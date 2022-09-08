@@ -16,9 +16,10 @@ set(CPACK_PACKAGE_NAME
 set(CPACK_SOURCE_PACKAGE_FILE_NAME
   "${CMAKE_PROJECT_NAME}-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}-Source")
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH};"${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
-set (WARNING_IGNORE_FLAGS "-Wno-deprecated-register")
+#set (WARNING_IGNORE_FLAGS "-Wno-deprecated-register")
+add_definitions(-w)
 set (BOOST_CXX_FLAGS "-Wno-deprecated-register -std=c++11")
 ## Prefer static to dynamic libraries
 SET(CMAKE_FIND_LIBRARY_SUFFIXES .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
@@ -178,8 +179,18 @@ endif()
 ##
 # Set the latest version and look for what we need
 ##
-set(Boost_ADDITIONAL_VERSIONS "1.53" "1.53.0" "1.54" "1.55" "1.56" "1.57.0" "1.58" "1.59")
-find_package(Boost 1.53.0 COMPONENTS iostreams filesystem system thread timer chrono program_options serialization)
+
+set (Boost_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install/include/boost/)
+include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/external/install/include/boost/)
+add_definitions(-DBOOST_ERROR_CODE_HEADER_ONLY)
+
+find_package(Boost)#COMPONENTS iostreams filesystem system thread timer chrono program_options serialization) 
+
+if(Boost_FOUND)
+    include_directories(${Boost_INCLUDE_DIRS})
+endif()
+
+
 message("BOOST_INCLUDEDIR = ${BOOST_INCLUDEDIR}")
 message("BOOST_LIBRARYDIR = ${BOOST_LIBRARYDIR}")
 message("Boost_FOUND = ${Boost_FOUND}")
@@ -200,11 +211,13 @@ if (BOOST_RECONFIGURE)
     unset(BOOST_ROOT CACHE)
     unset(CMAKE_PREFIX_PATH CACHE)
 
+    set(Boost_LIBRARIES ${CMAKE_CURRENT_SOURCE_DIR}/external/install/lib)
+    set(Boost_LIBRARIES ${CMAKE_CURRENT_SOURCE_DIR}/external/lib/libboost*.${SHARED_LIB_EXTENSION})
     set(BOOST_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/external/install)
     set(CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/install)
     set(Boost_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/external/install/include)
     set(Boost_LIBRARY_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/external/install/lib)
-    find_package(Boost 1.53.0 COMPONENTS iostreams filesystem system thread timer chrono program_options REQUIRED)
+    find_package(Boost)# 1.53.0 COMPONENTS iostreams filesystem system thread timer chrono program_options)
     set(FETCH_BOOST FALSE)
 endif()
 
@@ -301,9 +314,10 @@ ExternalProject_Add(libjellyfish
     CONFIGURE_COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/external/jellyfish-2.2.3/configure --prefix=<INSTALL_DIR> CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} CXXFLAGS=${JELLYFISH_CXX_FLAGS}
     BUILD_COMMAND ${MAKE} CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} CXXFLAGS=${JELLYFISH_CXX_FLAGS}
     BUILD_IN_SOURCE 1
-    INSTALL_COMMAND make install &&
-                    cp config.h <INSTALL_DIR>/include/jellyfish-2.2.3/jellyfish/ &&
-                    cp config.h <INSTALL_DIR>/include/
+    INSTALL_COMMAND mkdir -p <INSTALL_DIR>/include/jellyfish/ && make install &&
+                    cp config.h <INSTALL_DIR>/include/jellyfish/ &&
+                    cp config.h <INSTALL_DIR>/include/ &&
+                    mv ${CMAKE_CURRENT_SOURCE_DIR}/external/install/include/jellyfish-2.2.3/jellyfish ${CMAKE_CURRENT_SOURCE_DIR}/external/install/include/jellyfish
 )
 
 find_package(TBB)
@@ -325,26 +339,25 @@ endif()
 message("Build system will fetch and build Intel Threading Building Blocks")
 message("==================================================================")
 # These are useful for the custom install step we'll do later
-set(TBB_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/tbb43_20140724oss)
+set(TBB_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/oneTBB)
 set(TBB_INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install)
 
 if ("${TBB_COMPILER}" STREQUAL "gcc")
     ## Don't know why it's a problem yet, but if we're using
     ## GCC, get rid of the DO_ITT_NOTIFY flag
-    set(TBB_CXXFLAGS "${TBB_CXXFLAGS} -UDO_ITT_NOTIFY")
+    set(TBB_CXXFLAGS "${TBB_CXXFLAGS} -UDO_ITT_NOTIFY -DTBB_TEST=OFF -DCMAKE_INSTALL_PREFIX=${TBB_INSTALL_DIR}")
 endif()
 
 ExternalProject_Add(libtbb
 	DOWNLOAD_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external
-    # URL http://www.threadingbuildingblocks.org/sites/default/files/software_releases/source/tbb43_20140724oss_src.tgz
-    # DOWNLOAD_COMMAND curl -k -L  http://www.threadingbuildingblocks.org/sites/default/files/software_releases/source/tbb43_20140724oss_src.tgz -o tbb_20140724oss_src.tgz &&
-    #                 tar -xzvf tbb_20140724oss_src.tgz
-    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/tbb43_20140724oss
+    DOWNLOAD_COMMAND git clone https://github.com/oneapi-src/oneTBB.git 
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/oneTBB
     INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install
     PATCH_COMMAND "${TBB_PATCH_STEP}"
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND make CXXFLAGS=${TBB_CXXFLAGS} lambdas=1 compiler=${TBB_COMPILER} cfg=release tbb_build_prefix=LIBS
-    INSTALL_COMMAND sh -c "cp ${TBB_SOURCE_DIR}/build/LIBS_release/*.${SHARED_LIB_EXTENSION}* ${TBB_INSTALL_DIR}/lib && cp -r ${TBB_SOURCE_DIR}/include/* ${TBB_INSTALL_DIR}/include"
+    CONFIGURE_COMMAND cmake -S ${CMAKE_CURRENT_SOURCE_DIR}/external/oneTBB/ -B ${CMAKE_CURRENT_SOURCE_DIR}/external/oneTBB/
+    BUILD_COMMAND make --jobs=12 CXXFLAGS=${TBB_CXXFLAGS} lambdas=1 compiler=${TBB_COMPILER} cfg=release tbb_build_prefix=LIBS
+    #INSTALL_COMMAND sh -c "cp ${TBB_SOURCE_DIR}/build/LIBS_release/*.${SHARED_LIB_EXTENSION}* ${TBB_INSTALL_DIR}/lib && cp -r ${TBB_SOURCE_DIR}/include/* ${TBB_INSTALL_DIR}/include"
+    INSTALL_COMMAND make install
     BUILD_IN_SOURCE 1
 )
 
@@ -383,6 +396,13 @@ if(TBB_WILL_RECONFIGURE)
     #set(TBB_LIBRARIES tbb tbbmalloc)
     set(TBB_LIBRARIES ${CMAKE_CURRENT_SOURCE_DIR}/external/install/lib/libtbb.${SHARED_LIB_EXTENSION}
                       ${CMAKE_CURRENT_SOURCE_DIR}/external/install/lib/libtbbmalloc.${SHARED_LIB_EXTENSION}
+    )
+else()
+    set(TBB_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/external/tbb/include)
+    set(TBB_LIBRARY_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/external/tbb/lib)
+
+    set(TBB_LIBRARIES ${CMAKE_CURRENT_SOURCE_DIR}/external/tbb/lib/libtbb.${SHARED_LIB_EXTENSION}
+                      ${CMAKE_CURRENT_SOURCE_DIR}/external/tbb/lib/libtbbmalloc.${SHARED_LIB_EXTENSION}
     )
 endif()
 
@@ -525,5 +545,5 @@ message("CPACK_SOURCE_IGNORE_FILES = ${CPACK_SOURCE_IGNORE_FILES}")
 # Recurse into Sailfish source directory
 add_subdirectory ( src )
 
-# build a CPack driven installer package
-include (CPack)
+# # build a CPack driven installer package
+# include (CPack)

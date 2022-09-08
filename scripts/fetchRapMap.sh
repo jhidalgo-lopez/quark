@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 CURR_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 EXTERNAL_DIR=${CURR_DIR}/../external
@@ -36,5 +36,4 @@ cp -r ${EXTERNAL_DIR}/RapMap/include/tclap ${INSTALL_DIR}/include/rapmap
 cp -r ${EXTERNAL_DIR}/RapMap/include/*.h ${INSTALL_DIR}/include/rapmap
 cp -r ${EXTERNAL_DIR}/RapMap/include/*.hpp ${INSTALL_DIR}/include/rapmap 
 
-
-
+sed -i 's/ACCESSPERMS/(S_IRWXU|S_IRWXG|S_IRWXO)/g' ${INSTALL_DIR}/src/rapmap/RapMapFileSystem.cpp
