@@ -39,9 +39,9 @@ make install
 #cd && rm -r *
 
 
-cd /quark
-mkdir build
-cd build
-cmake ..
-make
-cd ..
+#cd /quark
+#mkdir build
+#cd build
+#cmake ..
+#make
+#cd ..
